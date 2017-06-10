@@ -6,4 +6,5 @@
                  [com.taoensso/timbre "4.10.0"]]
   :source-paths ["src"]
   :test-paths ["test"]
+  :profiles {:uberjar {:aot :all}}
   :main fileyard.main)
