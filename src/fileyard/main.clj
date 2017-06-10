@@ -22,19 +22,25 @@
 
 (defn put-file [storage-path req]
   (let [file (request-file storage-path req)]
-    (if (.exists file)
-      ;; 409 Conflict
-      {:status 409 :body (str "File " (.getName file) " already exists.")}
 
-      (do
-        ;; Copy the file
-        (with-open [file-out (io/output-stream file)
-                    zip-out (GZIPOutputStream. file-out)]
-          (io/copy (:body req) zip-out))
+    (if-not file
+      {:status 400 :body (str "Invalid file")}
 
-        ;; Send 201 created response
-        {:status 201
-         :body "Created"}))))
+      (if (.exists file)
+        ;; 409 Conflict
+        {:status 409 :body (str "File " (.getName file) " already exists.")}
+
+        (do
+          ;; Copy the file
+          (with-open [file-out (io/output-stream file)
+                      zip-out (GZIPOutputStream. file-out)]
+            (io/copy (:body req) zip-out))
+
+          (log/info "Stored file " (.getName file) ". Compressed size: " (.length file) " bytes.")
+
+          ;; Send 201 created response
+          {:status 201
+           :body "Created"})))))
 
 (defn accept-gzip? [{headers :headers :as req}]
   (str/includes? (or (headers "accept-encoding") "")
@@ -65,7 +71,6 @@
 
 (defn handler [storage-path]
   (fn [{:keys [request-method] :as req}]
-    (println req)
     (cond
       (= request-method :put)
       (put-file storage-path req)
