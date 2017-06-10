@@ -20,7 +20,10 @@
       ;; File is ok
       file)))
 
-(defn put-file [storage-path req]
+(defn- size [bytes]
+  (when bytes
+    (format "%.1f kb" (/ bytes 1024.0))))
+(defn put-file [storage-path {headers :headers :as req}]
   (let [file (request-file storage-path req)]
 
     (if-not file
@@ -36,7 +39,12 @@
                       zip-out (GZIPOutputStream. file-out)]
             (io/copy (:body req) zip-out))
 
-          (log/info "Stored file " (.getName file) ". Compressed size: " (.length file) " bytes.")
+          (log/info "Stored file " (.getName file)
+                    ". Content length: " (some-> "content-length"
+                                                 headers
+                                                 Integer/valueOf
+                                                 size)
+                    ". Compressed size: " (size (.length file)) " bytes.")
 
           ;; Send 201 created response
           {:status 201
