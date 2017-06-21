@@ -1,9 +1,10 @@
 (ns fileyard.main
   (:require [org.httpkit.server :as server]
             [clojure.java.io :as io]
-            [taoensso.timbre :as log]
-            [clojure.string :as str])
-  (:import (java.util.zip GZIPInputStream GZIPOutputStream))
+            [clojure.string :as str]
+            [fileyard.sha256 :as sha256])
+  (:import (java.util.zip GZIPInputStream GZIPOutputStream)
+           (java.io File))
   (:gen-class))
 
 (defn request-file [storage-path {:keys [uri] :as req}]
@@ -14,7 +15,7 @@
          (not= (.getCanonicalPath (.getParentFile file))
                (.getCanonicalPath storage-path)))
       (do
-        (log/warn "Illegal access attempted: " uri)
+        (println "Illegal access attempted: " uri)
         nil)
 
       ;; File is ok
@@ -23,32 +24,35 @@
 (defn- size [bytes]
   (when bytes
     (format "%.1f kb" (/ bytes 1024.0))))
-(defn put-file [storage-path {headers :headers :as req}]
-  (let [file (request-file storage-path req)]
 
-    (if-not file
-      {:status 400 :body (str "Invalid file")}
+(defn post-file [storage-path {headers :headers :as req}]
+  (let [file (File/createTempFile "fileyard" "upload" storage-path)
+        sha256-hash (sha256/with-digest-input-stream
+                      (:body req)
+                      ;; Copy the file
+                      (fn [body]
+                        (with-open [file-out (io/output-stream file)
+                                    zip-out (GZIPOutputStream. file-out)]
+                          (io/copy body zip-out))))
+        headers {"X-Fileyard-Hash" sha256-hash}
+        new-file (io/file storage-path sha256-hash)]
 
-      (if (.exists file)
-        ;; 409 Conflict
-        {:status 409 :body (str "File " (.getName file) " already exists.")}
+    (if (.exists new-file)
+      ;; File already exists, delete temp file and return hash
+      (do
+        (println "Duplicate file uploaded")
+        (.delete file)
+        {:status 200 :body "OK" :headers headers})
 
-        (do
-          ;; Copy the file
-          (with-open [file-out (io/output-stream file)
-                      zip-out (GZIPOutputStream. file-out)]
-            (io/copy (:body req) zip-out))
-
-          (log/info "Stored file " (.getName file)
-                    ". Content length: " (some-> "content-length"
-                                                 headers
-                                                 Integer/valueOf
-                                                 size)
-                    ". Compressed size: " (size (.length file)) " bytes.")
-
-          ;; Send 201 created response
-          {:status 201
-           :body "Created"})))))
+      ;; Rename to file by hash
+      (do
+        (println "Stored file " sha256-hash ". "
+                 (when-let [len (some-> "content-length" headers Integer/valueOf size)]
+                   (str "Content length: " len ". "))
+                 "Compressed size: " (size (.length file)) " bytes.")
+        (.renameTo file new-file)
+        ;; Send 201 created response
+        {:status 201 :body "Created" :headers headers}))))
 
 (defn accept-gzip? [{headers :headers :as req}]
   (str/includes? (or (headers "accept-encoding") "")
@@ -80,14 +84,14 @@
 (defn handler [storage-path]
   (fn [{:keys [request-method] :as req}]
     (cond
-      (= request-method :put)
-      (put-file storage-path req)
+      (= request-method :post)
+      (post-file storage-path req)
 
       (= request-method :get)
       (get-file storage-path req)
 
       :default
-      {:status 400 :body "Unrecognized request. Either PUT or GET a file."})))
+      {:status 400 :body "Unrecognized request. Either POST or GET a file."})))
 
 
 (defn check-path [path]
