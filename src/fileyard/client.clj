@@ -23,7 +23,6 @@
       (let [resp @(http/request {:method :post
                                  :body (io/input-stream input)
                                  :url url})]
-        (println "RESP: " (pr-str resp))
         (if (ok-response (:status resp))
           (get-in resp [:headers :x-fileyard-hash])
           {::error (str "Error saving file, response: " (:status resp)
