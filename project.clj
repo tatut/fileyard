@@ -1,4 +1,4 @@
-(defproject fileyard "0.2-SNAPSHOT"
+(defproject fileyard "0.2"
   :description "A simple HTTP file storage"
   :license {:name "MIT License"}
   :dependencies [[org.clojure/clojure "1.9.0-alpha17"]
