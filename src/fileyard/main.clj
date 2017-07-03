@@ -105,15 +105,16 @@
     (catch NumberFormatException nfe
       false)))
 
-(defn start [path port]
-  (server/run-server (handler path) {:port port})
+(defn start [path port max-file-size]
+  (server/run-server (handler path) {:port port
+                                     :max-body (or max-file-size 32000000)})
   (println "Fileyard is up"))
 
 (defn -main [& args]
-  (let [[path port] args]
+  (let [[path port max-file-size] args]
     (cond
       (not (and path port))
-      (println "Usage: give storage path and port")
+      (println "Usage: give storage path and port. Optional: max file size (default 32MB).")
 
       (not (check-path path))
       (println "Given path is not a writable directory: " path)
@@ -122,4 +123,4 @@
       (println "Given port is not a unprivileged port: " port)
 
       :default
-      (start (io/file path) (Integer/valueOf port)))))
+      (start (io/file path) (Integer/valueOf port) (when max-file-size (Integer/valueOf max-file-size))))))
