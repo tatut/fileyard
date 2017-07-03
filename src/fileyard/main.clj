@@ -83,15 +83,18 @@
 
 (defn handler [storage-path]
   (fn [{:keys [request-method] :as req}]
-    (cond
-      (= request-method :post)
-      (post-file storage-path req)
+      (try
+        (cond
+          (= request-method :post)
+          (post-file storage-path req)
 
-      (= request-method :get)
-      (get-file storage-path req)
+          (= request-method :get)
+          (get-file storage-path req)
 
-      :default
-      {:status 400 :body "Unrecognized request. Either POST or GET a file."})))
+          :default
+          {:status 400 :body "Unrecognized request. Either POST or GET a file."})
+        (catch Exception e
+          (println "An exception occurred when handling the request: " request-method ": " e)))))
 
 
 (defn check-path [path]
